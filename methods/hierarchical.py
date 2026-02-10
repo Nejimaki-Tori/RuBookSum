@@ -100,12 +100,12 @@ class Hierarchical:
         )
         result = extract_response(res)
         
-        #print('MERGE')
-        #print(myprompt)
-        #print('-'*100)
-        #print(result)
-        #print('-'*100)
-        #print('-'*100)
+       # print('MERGE')
+       # print(myprompt)
+       # print('-'*100)
+       # print(result)
+       # print('-'*100)
+       # print('-'*100)
         return result
     
     async def merge_group(self, group1, group2, current_word_limit):

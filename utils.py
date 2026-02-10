@@ -13,7 +13,7 @@ model = ''
 
 def extract_response(response):
     text = response.choices[0].message.content.strip() if response.choices else None
-    return re.sub(r"<\/?think>", "", text).strip()
+    return re.sub(r"<\/?think>", "", text).strip() if text else None
 
 class LlmCompleter:
     def __init__(self, api_address, api_key, model_name_or_path):
@@ -41,7 +41,7 @@ class LlmCompleter:
                              choices=None, rep_penalty=1.0,
                              regex_pattern=None, max_tokens=512,
                              use_beam_search=False, beam_width=1,
-                             answer_prefix=None):
+                             answer_prefix=None, temperature=0.01):
         assert sum(map(lambda x: x is not None, [choices, regex_pattern])) < 2, "Only one guided mode is allowed"
         # print(query)
         msgs = self.prepare_messages(query, system, examples, answer_prefix)
@@ -50,17 +50,17 @@ class LlmCompleter:
         rep_penalty = 1.05 if self.model_name == 'RefalMachine/RuadaptQwen3-32B-Instruct-v2' else 1.0
 
         needs_generation_start = answer_prefix is None
-
+        print('!!!', temperature)
         if use_beam_search:
             beam_width = max(3, beam_width)
         completion = self.client.chat.completions.create(
             model=self.path,
             messages=msgs,
-            temperature=0.001,
+            temperature=temperature,
             top_p=0.9,
             max_tokens=max_tokens,
             n=beam_width,
-            timeout=180.0,
+            timeout=240.0,
             extra_body={
                 "repetition_penalty": rep_penalty,
                 "guided_choice": choices,
@@ -90,6 +90,7 @@ class LlmCompleter:
             logprobs=True,
             top_logprobs=10,
             max_tokens=max_tokens,
+            timeout=240.0,
             extra_body={
                 "repetition_penalty": 1.0,
                 "guided_choice": choices,
@@ -97,12 +98,6 @@ class LlmCompleter:
             }
         )
         response = await completion
-        response = response.choices[0]
-        ch, probs = list(
-            zip(*((tok.token, tok.logprob) for tok in response.logprobs.content[0].top_logprobs))
-        )
-        probs = softmax(probs).tolist()
-        response = dict(zip(ch, probs))
         return response
 
 class AsyncList:

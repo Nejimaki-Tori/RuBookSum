@@ -97,10 +97,10 @@ class Blueprint(Hierarchical):
         )
 
         summary = extract_response(sumry)
-        #print('BLUERPRINT SUMMARY')
+        print('BLUERPRINT SUMMARY')
         #print(myprompt)
         #print('-'*100)
-        #print(summary)
+        print(summary)
         #print('-'*100)
         #print('-'*100)
         return summary
@@ -115,12 +115,14 @@ class Blueprint(Hierarchical):
         )
 
         raw_questions = extract_response(qs)
+        print(raw_questions)
         questions = [q.strip() for q in raw_questions.split('\n') if q.strip()]
         #print(questions)
-        #print('QUESTIONS')
+        print('QUESTIONS')
         #print(myprompt)
         #print('-'*100)
-        #print(questions)
+        print(len(questions))
+        print(questions)
         #print('-'*100)
         #print('-'*100)
         return questions
@@ -281,6 +283,7 @@ class Blueprint(Hierarchical):
                 
             await tasks.complete_couroutines(batch_size=40)
             summaries = await tasks.to_list()
+            # blueprint = await self.generate_blueprint(summaries) if self.mode == 'cluster' else None
     
         final_summary = summaries[0].strip()
         #print('d3')
