@@ -77,12 +77,19 @@ SUMMARIZE_BLUEPRINT_NO_ANSWERS_PROMPT = """
 """
 
 class Blueprint(Hierarchical):
-    def __init__(self, client, device, encoder, mode='default', think_pass=''):
+    def __init__(
+        self, 
+        client, 
+        device, 
+        encoder, 
+        mode: str = 'default', 
+        think_pass: str = ''
+    ):
         super().__init__(client, device, encoder, think_pass)
+        if mode not in ('default', 'cluster'):
+            raise ValueError('Wrong mode for Blueprint! Choose either `default` or `cluster`.')
+            
         self.mode = mode
-        self.think_pass = think_pass
-        if self.mode != 'default' and mode != 'cluster':
-            raise ValueError("Wrong mode for Blueprint! Choose either `default` or `cluster`.")
     
     async def summarize_with_blueprint(self, chunk, blueprint):
         if self.mode == 'default':
@@ -105,7 +112,7 @@ class Blueprint(Hierarchical):
         #print('-'*100)
         return summary
 
-    async def generate_questions_chunk(self, chunk):
+    async def generate_questions_chunk(self, chunk: str):
         myprompt = BLUEPRINT_QUESTIONS_PROMPT.format(chunk=chunk) + self.think_pass
     
         qs = await self.client.get_completion(
@@ -127,7 +134,7 @@ class Blueprint(Hierarchical):
         #print('-'*100)
         return questions
 
-    async def generate_questions_all(self, chunks):
+    async def generate_questions_all(self, chunks: list[str]):
         questions = AsyncList()
 
         for chunk in chunks:
@@ -138,7 +145,7 @@ class Blueprint(Hierarchical):
 
         return questions
 
-    async def get_answer(self, chunk, question):
+    async def get_answer(self, chunk: str, question: str):
         myprompt = BLUEPRINT_ANSWER_PROMPT.format(chunk=chunk, question=question) + self.think_pass
 
         ans = await self.client.get_completion(
@@ -156,7 +163,7 @@ class Blueprint(Hierarchical):
         #print('-'*100)
         return answer
         
-    async def generate_answers(self, chunk, questions):
+    async def generate_answers(self, chunk: str, questions: str):
         answers = AsyncList()
 
         for question in questions:
@@ -167,7 +174,7 @@ class Blueprint(Hierarchical):
 
         return answers
 
-    async def generate_answers_all(self, chunks, questions_set):
+    async def generate_answers_all(self, chunks: list[str], questions_set: list[str]):
         answers = AsyncList()
         
         for chunk, questions in zip(chunks, questions_set):
@@ -178,7 +185,7 @@ class Blueprint(Hierarchical):
 
         return answers
 
-    def cluster_questions(self, questions):
+    def cluster_questions(self, questions: list[str]):
         '''Кластеризация вопросов'''
         embs = self.encoder.encode(questions, batch_size=16, normalize_embeddings=True, device=self.device)
 
@@ -198,7 +205,7 @@ class Blueprint(Hierarchical):
 
         return clusters
 
-    def merge_answers_and_questions(self, questions, answers):
+    def merge_answers_and_questions(self, questions: list[str], answers: list[str]):
         result = []
         for q, a in zip(questions, answers):
             tmp = '\n'.join([question + ' -- ' + answer for question, answer in zip(q, a)])
@@ -206,7 +213,7 @@ class Blueprint(Hierarchical):
             
         return result
 
-    async def generalize_questions(self, questions):
+    async def generalize_questions(self, questions: list[str]):
         questions_str = "\n".join(f"- {q}" for q in questions)
         myprompt = GENERALISE_QUESTIONS_PROMPT.format(questions=questions) + self.think_pass
     
@@ -219,7 +226,7 @@ class Blueprint(Hierarchical):
         question = extract_response(res)
         return question
 
-    async def generate_blueprint(self, chunks):
+    async def generate_blueprint(self, chunks: list[str]):
         questions_set = await self.generate_questions_all(chunks)
         #print(questions_set)
         
@@ -239,13 +246,13 @@ class Blueprint(Hierarchical):
         blueprint = self.merge_answers_and_questions(questions_set, answers)
         return blueprint
 
-    async def generate_single_blueprint(self, chunk): # для сжатия аннотаций
+    async def generate_single_blueprint(self, chunk: str): # для сжатия аннотаций
         questions = await self.generate_questions_chunk(chunk)
         answers = await self.get_answer(chunk, questions)
         blueprint = self.merge_answers_and_questions([questions], [answers])
         return blueprint
     
-    async def merge_pair(self, sum1, sum2, word_limit, blueprint=None): # для сжатия аннотаций
+    async def merge_pair(self, sum1: str, sum2: str, word_limit: int, blueprint: str = ''): # для сжатия аннотаций
         if not sum2:
             return sum1
         combo = f"{sum1} {sum2}".strip()
@@ -257,7 +264,7 @@ class Blueprint(Hierarchical):
             combo = await self.summarize_with_blueprint(combo, bp)
         return combo
     
-    async def text_blueprint_summary(self, chunks, word_limit=500):
+    async def text_blueprint_summary(self, chunks: list[str], word_limit=500):
         blueprint = await self.generate_blueprint(chunks)
         #print(blueprint)
         #return
@@ -296,7 +303,7 @@ class Blueprint(Hierarchical):
     
         return final_summary
 
-    async def run(self, chunks, initial_word_limit=500, mode='default'):
+    async def run(self, chunks: list[str], initial_word_limit: int = 500, mode: str = 'default'):
         self.mode = mode
         s = await self.text_blueprint_summary(chunks, initial_word_limit)
         self.clean_memory()
