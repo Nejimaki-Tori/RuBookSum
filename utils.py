@@ -20,8 +20,6 @@ class LlmCompleter:
         self.client = AsyncOpenAI(api_key=api_key, base_url=api_address)
         self.model_name = model_name_or_path
         self.path = model_name_or_path
-        # if "workdir" not in model_name_or_path:
-        #     self.path = f'/workdir/models/{self.model_name}'
 
     def prepare_messages(self, query, system, examples, answer_prefix):
         msgs = []
@@ -50,7 +48,6 @@ class LlmCompleter:
         rep_penalty = 1.05 if self.model_name == 'RefalMachine/RuadaptQwen3-32B-Instruct-v2' else 1.0
 
         needs_generation_start = answer_prefix is None
-        print('!!!', temperature)
         if use_beam_search:
             beam_width = max(3, beam_width)
         completion = self.client.chat.completions.create(

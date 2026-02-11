@@ -12,3 +12,4 @@ bert_score
 scikit-learn
 rouge
 razdel
+aiofiles

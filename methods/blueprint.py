@@ -108,12 +108,6 @@ class Blueprint(Hierarchical):
         )
 
         summary = extract_response(sumry)
-        #print('BLUERPRINT SUMMARY')
-        #print(myprompt)
-        #print('-'*100)
-        #print(summary)
-        #print('-'*100)
-        #print('-'*100)
         return summary
 
     async def generate_questions_chunk(self, chunk: str):
@@ -126,26 +120,8 @@ class Blueprint(Hierarchical):
         )
 
         raw_questions = extract_response(qs)
-        #print(raw_questions)
         questions = [q.strip() for q in raw_questions.split('\n') if q.strip()]
-        #print(questions)
-        #print('QUESTIONS')
-        #print(myprompt)
-        #print('-'*100)
-        #print(len(questions))
-        #print(questions)
-        #print('-'*100)
-        #print('-'*100)
         return questions
-
-    #async def generate_questions_all(self, chunks: list[str]):
-    #    questions = AsyncList()
-    #    for chunk in chunks:
-    #        questions.append(self.generate_questions_chunk(chunk))
-    #    
-    #    await questions.complete_couroutines(batch_size=40)
-    #    questions = await questions.to_list()
-    #    return questions
 
     async def get_answer(self, chunk: str, question: str):
         myprompt = BLUEPRINT_ANSWER_PROMPT.format(chunk=chunk, question=question) + self.think_pass
@@ -157,12 +133,6 @@ class Blueprint(Hierarchical):
         )
 
         answer = extract_response(ans)
-        #print('ANSWER')
-        #print(myprompt)
-        #print('-'*100)
-        #print(answer)
-        #print('-'*100)
-        #print('-'*100)
         return answer
         
     async def generate_answers(self, chunk: str, questions: list[str]) -> list[str]:
@@ -175,16 +145,6 @@ class Blueprint(Hierarchical):
         answers = await answers.to_list()
 
         return answers
-
-    # async def generate_answers_all(self, chunks: list[str], questions_set: list[str]):
-    #     answers = AsyncList()
-    #     
-    #     for chunk, questions in zip(chunks, questions_set):
-    #         answers.append(self.generate_answers(chunk, questions))
-    #         
-    #     await answers.complete_couroutines(batch_size=40)
-    #     answers = await answers.to_list()
-    #     return answers
 
     def cluster_questions(self, questions: list[str]):
         '''Кластеризация вопросов'''
@@ -203,9 +163,6 @@ class Blueprint(Hierarchical):
         return clusters
 
     def merge_answers_and_questions(self, questions: list[str], answers: list[str]):
-        
-        # return '\n'.join(f'{q} -- {a}' for q, a in zip(questions, answers)).strip()
-        
         result = []
         for q, a in zip(questions, answers):
             tmp = '\n'.join([question + ' -- ' + answer for question, answer in zip(q, a)])
@@ -232,8 +189,7 @@ class Blueprint(Hierarchical):
     async def generate_blueprint(self, chunks: list[str]) -> list[str]:
         if not chunks:
             raise ValueError('Empty chunks!')
-            
-        # questions_set = await self.generate_questions_all(chunks)
+
         questions_set = AsyncList()
         for chunk in chunks:
             questions_set.append(self.generate_questions_chunk(chunk))
@@ -256,28 +212,19 @@ class Blueprint(Hierarchical):
             blueprint = '\n'.join(q.strip() for q in generalized_questions if q.strip())
             return [blueprint] * len(chunks)
 
-        #answers = await self.generate_answers_all(chunks, questions_set)
         answers = []
         for chunk, questions_per_chunk in zip(chunks, questions_set):
-            answers.append(await self.generate_answers(chunk, questions))
-        #print(answers)
+            answers.append(await self.generate_answers(chunk, questions_per_chunk))
         blueprint = self.merge_answers_and_questions(questions_set, answers)
         return blueprint
 
-    # async def generate_single_blueprint(self, chunk: str): # создание одного плана для сжатия двух аннотаций
-    #     questions = await self.generate_questions_chunk(chunk)
-    #     answers = await self.generate_answers(chunk, questions)
-    #     blueprint = '\n'.join([q + ' -- ' + a for q, a in zip(questions, answers)])
-    #     #blueprint = self.merge_answers_and_questions([questions], [answers])[0]
-    #     return blueprint
-    
     async def merge_pair(self, sum1: str, sum2: str, word_limit: int, blueprint: str = ''): # для сжатия аннотаций
         if not sum2:
             return sum1
         combo = f"{sum1} {sum2}".strip()
         if len(combo.split()) > word_limit:
             if self.mode == 'default':
-                bp = await self.generate_blueprint([combo])[0]
+                bp = (await self.generate_blueprint([combo]))[0]
             else:
                 bp = blueprint
             combo = await self.summarize_with_blueprint(combo, bp)
@@ -285,17 +232,13 @@ class Blueprint(Hierarchical):
     
     async def text_blueprint_summary(self, chunks: list[str], word_limit=500):
         blueprint = await self.generate_blueprint(chunks)
-        #print(blueprint)
-        #return
         summaries_list = AsyncList()
 
-        #print('d1')
         for chunk, bp in zip(chunks, blueprint):
             summaries_list.append(self.summarize_with_blueprint(chunk, bp))
                 
         await summaries_list.complete_couroutines(batch_size=40)
         summaries = await summaries_list.to_list()
-        #print('d2')
         while len(summaries) > 1:
             tasks = AsyncList()
             i = 0
@@ -311,11 +254,9 @@ class Blueprint(Hierarchical):
             blueprint = await self.generate_blueprint(summaries) if self.mode == 'cluster' else None
     
         final_summary = summaries[0].strip()
-        #print('d3')
         if len(final_summary.split()) > word_limit:
             if self.mode == 'default':
-                # bp = await self.generate_single_blueprint(final_summary)
-                bp = await self.generate_blueprint([final_summary])[0]
+                bp = (await self.generate_blueprint([final_summary]))[0]
             else:
                 bp = blueprint
             final_summary = await self.summarize_with_blueprint(final_summary, bp)
