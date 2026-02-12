@@ -11,6 +11,17 @@ API = ''
 URL = ''
 model = ''
 
+async def _complete(client, prompt: str = '', max_tokens: int = 512):
+    completion = await client.get_completion(
+        prompt,
+        max_tokens=max_tokens,
+        rep_penalty=1.0
+    )
+
+    result = extract_response(completion)
+
+    return result
+
 def extract_response(response):
     text = response.choices[0].message.content.strip() if response.choices else None
     return re.sub(r"<\/?think>", "", text).strip() if text else None

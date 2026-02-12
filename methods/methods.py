@@ -14,15 +14,12 @@ class Summarisation:
         self.encoder = encoder
         self.think_pass = ' /no_think' if model_name == 'Qwen3-235B-A22B' or model_name == 'RefalMachine/RuadaptQwen3-32B-Instruct-v2' else ''
         self.client = LlmCompleter(URL, KEY, self.model_name)
-        self.client_evaluater = LlmCompleter(URL, KEY, 'Qwen3-235B-A22B-Instruct-2507')
         self.blueprint = Blueprint(self.client, self.device, self.encoder, mode='default', think_pass=self.think_pass)
         self.hierarchical = Hierarchical(self.client, self.device, self.encoder, think_pass=self.think_pass)
-        self.evaluater = Evaluater(evaluater=self.client_evaluater, device=self.device, encoder=self.encoder, pre_load=True)
-        try:
-            with open('combined_data.json', 'r', encoding='utf-8') as f:
-                self.collection = json.load(f)
-        except:
-            raise ValueError("No file with annotations and book texts!")
+        #self.evaluater = Evaluater(evaluater=self.client_evaluater, device=self.device, encoder=self.encoder, pre_load=True)
+
+        # self.client_evaluater = LlmCompleter(URL, KEY, 'Qwen3-235B-A22B-Instruct-2507')
+
 
     def change_model(self, KEY=None, URL=None, model_name=None):
         self.model_name = model_name
@@ -30,3 +27,10 @@ class Summarisation:
         self.client = LlmCompleter(URL, KEY, self.model_name)
         self.blueprint = Blueprint(self.client, self.device, self.encoder, mode='default', think_pass=self.think_pass)
         self.hierarchical = Hierarchical(self.client, self.device, self.encoder, think_pass=self.think_pass)
+
+    def prepare_enviroment(self):
+        try:
+            with open('combined_data.json', 'r', encoding='utf-8') as f:
+                self.collection = json.load(f)
+        except:
+            raise ValueError("No file with annotations and book texts!")

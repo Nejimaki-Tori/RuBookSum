@@ -1,83 +1,12 @@
-from utils import AsyncList, extract_response
+from utils import AsyncList, extract_response, _complete
 from hierarchical import Hierarchical
 from sklearn.cluster import KMeans
 import math
 import random
 import numpy as np
+from prompts import BLUEPRINT_QUESTIONS_PROMPT, BLUEPRINT_ANSWER_PROMPT, GENERALISE_QUESTIONS_PROMPT, SUMMARIZE_BLUEPRINT_PROMPT, SUMMARIZE_BLUEPRINT_NO_ANSWERS_PROMPT
 
 RANDOM_SEED = 42
-
-BLUEPRINT_QUESTIONS_PROMPT = """Создай план для следующего текста в виде списка ключевых вопросов, которые помогут понять основные элементы текста. 
-Строго соблюдай правила:
-- Вопросы должны выявлять главные события, персонажей, конфликты и важные детали.
-- Не создавай более 15 вопросов, выбирая только самые существенные.
-- Избегай повторяющихся по смыслу вопросов.
-- Выводи только вопросы, каждый с новой строки, без номеров и дополнительных пояснений.
-
-Текст:
----
-{chunk}
----
-"""
-
-BLUEPRINT_ANSWER_PROMPT = """Ответь на вопрос, используя исключительно информацию из предоставленного текста. 
-Строго соблюдай следующие правила:
-- Будь максимально точным и лаконичным.
-- Не добавляй пояснений, комментариев или анализа за пределами текста.
-- Сохрани оригинальную терминологию и имена собственные из текста.
-- Используй только информацию, предоставленную в тексте.
-
-Текст:
----
-{chunk}
----
-
-Вопрос:
-**{question}**
-"""
-
-GENERALISE_QUESTIONS_PROMPT = """Сформулируй один обобщенный ключевой вопрос, который:
-- Охватывает общую тему всех вопросов.
-- Сохраняет их смысловую суть
-- Устраняет избыточность и дублирование
-
-Исходные вопросы:
----
-{questions}
----
-
-Выведи только итоговый обобщенный вопрос без дополнительных комментариев.
-"""
-
-SUMMARIZE_BLUEPRINT_PROMPT = """
-Используя следующий план из вопросов и ответов, создайте краткое содержание представленного далее текста.
-Убедитесь, что текст логически связан и сохраняет важные элементы исходного контекста. Не добавляйте ничего лишнего в ответе.
-
-План:
----
-{blueprint}
----
-
-Текст:
----
-{chunk}
----
-"""
-
-SUMMARIZE_BLUEPRINT_NO_ANSWERS_PROMPT = """
-Используя следующий план из вопросов создайте краткое содержание представленного далее текста.
-Убедитесь, что текст логически связан и сохраняет важные элементы исходного контекста. Не добавляйте ничего лишнего в ответе.
-
-План:
----
-{blueprint}
----
-
-Текст:
----
-{chunk}
----
-"""
 
 
 class Blueprint(Hierarchical):
@@ -89,7 +18,7 @@ class Blueprint(Hierarchical):
         mode: str = 'default', 
         think_pass: str = ''
     ):
-        super().__init__(client, device, encoder, think_pass)
+        super().__init__(client, device, encoder, mode='default', think_pass=think_pass)
         if mode not in ('default', 'cluster'):
             raise ValueError('Wrong mode for Blueprint! Choose either `default` or `cluster`.')
             
@@ -100,40 +29,19 @@ class Blueprint(Hierarchical):
             myprompt = SUMMARIZE_BLUEPRINT_PROMPT.format(blueprint=blueprint, chunk=chunk) + self.think_pass
         else:
             myprompt = SUMMARIZE_BLUEPRINT_NO_ANSWERS_PROMPT.format(blueprint=blueprint, chunk=chunk) + self.think_pass
-    
-        sumry = await self.client.get_completion(
-            myprompt,
-            max_tokens=2048,
-            rep_penalty=1.0
-        )
-
-        summary = extract_response(sumry)
-        return summary
+            
+        return await _complete(client=self.client, prompt=myprompt, max_tokens=2048)
 
     async def generate_questions_chunk(self, chunk: str):
         myprompt = BLUEPRINT_QUESTIONS_PROMPT.format(chunk=chunk) + self.think_pass
-    
-        qs = await self.client.get_completion(
-            myprompt,
-            max_tokens=1024,
-            rep_penalty=1.0
-        )
-
-        raw_questions = extract_response(qs)
+        raw_questions = await _complete(client=self.client, prompt=myprompt, max_tokens=1024)
+        
         questions = [q.strip() for q in raw_questions.split('\n') if q.strip()]
         return questions
 
     async def get_answer(self, chunk: str, question: str):
         myprompt = BLUEPRINT_ANSWER_PROMPT.format(chunk=chunk, question=question) + self.think_pass
-
-        ans = await self.client.get_completion(
-            myprompt,
-            max_tokens=256,
-            rep_penalty=1.0
-        )
-
-        answer = extract_response(ans)
-        return answer
+        return await _complete(client=self.client, prompt=myprompt, max_tokens=256)
         
     async def generate_answers(self, chunk: str, questions: list[str]) -> list[str]:
         answers = AsyncList()
@@ -176,15 +84,7 @@ class Blueprint(Hierarchical):
         
         questions_str = '\n'.join(f'- {q}' for q in sampled_questions)
         myprompt = GENERALISE_QUESTIONS_PROMPT.format(questions=questions_str) + self.think_pass
-    
-        res = await self.client.get_completion(
-            myprompt,
-            max_tokens=128,
-            rep_penalty=1.0
-        )
-    
-        question = extract_response(res)
-        return question
+        return await _complete(client=self.client, prompt=myprompt, max_tokens=128)
 
     async def generate_blueprint(self, chunks: list[str]) -> list[str]:
         if not chunks:

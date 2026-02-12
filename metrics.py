@@ -1,5 +1,4 @@
 from typing import List
-from evaluate import load as hf_load
 from rouge import Rouge
 from utils import AsyncList, model, extract_response
 import re
@@ -55,8 +54,6 @@ class Evaluater:
         self.encoder = encoder
         self.stemmer = SnowballStemmer('russian')
         self.qa_dir = 'qa_data'
-        #self.rouge = hf_load('rouge')
-        self.bert_score = hf_load('bertscore', model_type='deepvk/USER-bge-m3')
         
     def lemmatize_text(self, text):
         tokens = word_tokenize(text, language='russian')
@@ -81,9 +78,6 @@ class Evaluater:
         )
         rouge_l = scores[0]["rouge-l"]
         return rouge_l['f']
-
-    #def bert_f1(self, ref, pred):
-    #    return self.bert_score.compute(references=[ref], predictions=[pred], lang='ru')['f1'][0]
 
     def bertscore(self, ref, pred):
         ref = self.clean(ref)
