@@ -93,6 +93,34 @@ pip install torch==1.12.1+cu114 torchvision==0.13.1+cu114 torchaudio==0.12.1 \
 
 ---
 
+## Пример использования
+
+```python
+import sys
+import torch
+from sentence_transformers import SentenceTransformer
+sys.path.append('src')
+from methods import Summarisation
+
+with open('Access_key.txt', 'r', encoding='utf-8') as file: # тут можно указать эндпоинты
+    url, key = file.read().split()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+encoder = SentenceTransformer('deepvk/USER-bge-m3').to(device)
+bench = Summarisation(url=url, key=key, model_name='ruadapt-qwen3-4b', device=device, encoder=encoder) # здесь указывается название модели
+bench.prepare_enviroment()
+
+result = await bench.run_benchmark_one_method(
+    is_evalutation_needed=True, # нужен ли подсчет метрик
+    number_of_books=1, # сколько книг будет обработано
+    method='hierarchical', # метод сжатия
+    mode='default', # режим для метода сжатия
+    initial_word_limit=500, # максимальная длина аннотации (в символах)
+    text_length_cap=80000, # слишком длинные тексты не будут обрабатываться
+    save_json_path='benchmark_results.json' # куда сохранять результаты
+)
+```
+
 ## Параметры
 
 | Метод                           | Параметр             | Значение по умолчанию | Описание                                                           |
