@@ -62,11 +62,12 @@
 ```text
 .
 ├── combined_data.json          # Данные (книги и аннотации)
-├── methods/                    # Реализации методов
+├── src/                    # Реализации методов
 │   ├── hierarchical.py         # Иерархический метод
 │   ├── iterative.py            # Итеративный метод
 │   ├── pseudo.py               # Псевдо-генерация по названию
 │   ├── blueprint.py            # Text-Blueprint
+│   ├── prompts.py              # Промпты для модели
 │   └── methods.py              # Объединяет в себе все реализованные методы
 ├── utils.py                    # LLM-клиент и вспомогательные функции (разбиение на чанки и др.)
 ├── metrics.py                  # Метрики: ROUGE-L, BERTScore, Coverage, Answer Similarity
@@ -97,11 +98,11 @@ pip install torch==1.12.1+cu114 torchvision==0.13.1+cu114 torchaudio==0.12.1 \
 | Метод                           | Параметр             | Значение по умолчанию | Описание                                                           |
 | ------------------------------- | -------------------- | --------------------- | ------------------------------------------------------------------ |
 | `Hierarchical.run`              | `initial_word_limit` | `500`                 | Максимальное число слов в аннотации                                |
-|                                 | `filtered`           | `False`               | Фильтрация семантически близких узлов                              |
+|                                 | `mode`               | `default`             | Фильтрация семантически близких узлов                              |
 | `Iterative.run`                 | `initial_word_limit` | `500`                 | Лимит слов при итеративном обновлении аннотации                    |
 | `Blueprint.run`                 | `initial_word_limit` | `500`                 | Лимит слов в итоговой аннотации                                    |
 |                                 | `mode`               | `'default'`           | Режим работы Text-Blueprint: `default` или `cluster`               |
-| `Evaluater.evaluate_annotation` | —                    | —                     | Использует метрики ROUGE-L, BERTScore, Coverage, Answer Similarity |
+| `Evaluater.evaluate_annotation` | —                    | —                     | Использует метрики ROUGE-L, BERTScore                              |
 
 ---
 
@@ -110,13 +111,3 @@ pip install torch==1.12.1+cu114 torchvision==0.13.1+cu114 torchaudio==0.12.1 \
 * **ROUGE-L** — лексическое совпадение по наибольшей общей подпоследовательности.
 
 * **BERTScore** — семантическое совпадение с эталоном с помощью SentenceTransformer.
-
-* **Coverage** — доля заранее сгенерированных ключевых вопросов, на которые содержится ответ в аннотации Формула:
-
-  $\text{Coverage} = \frac{\text{Число покрытых вопросов}}{\text{Общее число вопросов}}$
-
-* **Answer Similarity** — средняя семантическая близость между ответами на ключевые вопросы из сгенерированной и эталонной аннотации:
-
-  $\text{AnswerSimilarity} = \frac{1}{N} \sum_{i=1}^N \text{sim}(a_i^{pred}, a_i^{ref})$
-
-где $\text{sim}$ — косинусное сходство эмбеддингов.
