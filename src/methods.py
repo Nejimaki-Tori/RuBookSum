@@ -129,13 +129,15 @@ class Summarisation:
                     'initial_word_limit': initial_word_limit,
                     'text_len': len(item['text']),
                     'runtime_sec': round(runtime, 4),
-                    'bertscore': float(bertscore),
+                    'bertscore_p': float(bertscore[0]),
+                    'bertscore_r': float(bertscore[1]),
+                    'bertscore_f': float(bertscore[2]),
                     'rougeL': float(rouge),
                 }
     
                 rows.append(record)
     
-                self.append_to_josn(record, json_path=save_json_path)
+                self.append_to_json(record, json_path=save_json_path)
             else: 
                 record = {
                     'book_idx': idx,
@@ -150,7 +152,7 @@ class Summarisation:
                 }
 
                 rows.append(record)
-                self.append_to_josn(record, json_path=save_json_path)
+                self.append_to_json(record, json_path=save_json_path)
         
         if is_evalutation_needed:    
             data = pd.DataFrame(rows)
