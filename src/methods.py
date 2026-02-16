@@ -1,15 +1,37 @@
 import json
 from blueprint import Blueprint
 from hierarchical import Hierarchical
-from iterative import Iterative
-from pseudo import Pseudo
 from utils import LlmCompleter, chunk_text
 from metrics import Evaluater
 import time
 import pandas as pd
+from pathlib import Path
+
+
+METHOD_BLUEPRINT = 'blueprint'
+METHOD_HIERARCHICAL = 'hierarchical'
+
+MODE_DEFAULT = 'default'
+MODE_CLUSTER = 'cluster'
+MODE_FILTERED = 'filtered'
+
+ALLOWED_MODES = {
+    METHOD_BLUEPRINT: {MODE_DEFAULT, MODE_CLUSTER},
+    METHOD_HIERARCHICAL: {MODE_DEFAULT, MODE_FILTERED},
+}
+
+def validate_method_mode(method: str, mode: str):
+    if method not in ALLOWED_MODES:
+        allowed_methods = ', '.join(ALLOWED_MODES.keys())
+        raise ValueError(f'Unknown method `{method}`. Allowed: {allowed_methods}')
+
+    if mode not in ALLOWED_MODES[method]:
+        allowed_modes = ', '.join(sorted(ALLOWED_MODES[method]))
+        raise ValueError(f'Unknown mode `{mode}` for method `{method}`. Allowed: {allowed_modes}')
 
 
 class Summarisation:
+    '''Основной класс для запуска бенчмарка'''
     def __init__(
         self, 
         key: str = '', 
@@ -50,50 +72,33 @@ class Summarisation:
         self.think_pass = '' if is_thinking_needed else ' /no_think'
         self.client = LlmCompleter(url, key, self.model_name)
         self.blueprint = Blueprint(self.client, self.device, self.encoder, mode='default', think_pass=self.think_pass)
-        self.hierarchical = Hierarchical(self.client, self.device, self.encoder, think_pass=self.think_pass)
+        self.hierarchical = Hierarchical(self.client, self.device, self.encoder, mode='default', think_pass=self.think_pass)
 
     def prepare_enviroment(self):
         try:
-            with open('combined_data.json', 'r', encoding='utf-8') as f:
+            with open('collection.json', 'r', encoding='utf-8') as f:
                 self.collection = json.load(f)
         except:
             raise ValueError('No file with annotations and book texts!')
 
     async def run_method(self, text: str, method: str = '', mode: str = '', initial_word_limit: int = 500):
-        if method not in ('blueprint', 'hierarchical'):
-            raise ValueError(f'No such method: {method}! Only blueprint and hierarchical are available.')
+        validate_method_mode(method, mode)
 
-        if method == 'blueprint':
-            if mode not in ('default', 'cluster'):
-                raise ValueError(f'No such mode: {mode}! Only default and cluster are available for blueprint.')
+        chunks = chunk_text(text)
 
-            chunks = chunk_text(text)
-            summary = await self.blueprint.run(chunks=chunks, initial_word_limit=initial_word_limit, mode=mode)
-            return summary
+        if method == METHOD_BLUEPRINT:
+            return await self.blueprint.run(chunks=chunks, initial_word_limit=initial_word_limit, mode=mode)
 
-        if method == 'hierarchical':
-            if mode not in ('default', 'filtered'):
-                raise ValueError(f'No such mode: {mode}! Only default and filtered are available for hierarchical.')
-
-            chunks = chunk_text(text)
-            summary = await self.hierarchical.run(chunks, initial_word_limit=500, mode=mode)
-            return summary
+        return await self.hierarchical.run(chunks, initial_word_limit=initial_word_limit, mode=mode)
 
     def evaluate_annotation(self, ref_annotation, gen_annotation):
         return self.evaluater.evaluate_annotation(ref_annotation, gen_annotation)
 
-    def append_to_json(self, record: dict, json_path: str = 'benchmark_results.json'):
-        data = []
-
-        try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-        except:
-            data = []
-
-        data.append(record)
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+    def append_to_json(self, record: dict, output_path):
+        line = json.dumps(record, ensure_ascii=False) + '\n'
+        with output_path.open('a', encoding='utf-8') as f:
+            f.write(line)
+            f.flush()
 
     async def run_benchmark_one_method(
         self, 
@@ -102,16 +107,22 @@ class Summarisation:
         method: str = 'hierarchical', 
         mode: str = 'default', 
         initial_word_limit: int = 500,
-        text_length_cap: int = 80000,
-        save_json_path: str = 'benchmark_results.json'
+        cap_chars: int = 80000,
+        output_dir: str = 'output',
+        output_name: str = 'benchmark_results.jsonl'
     ):
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        output_path = output_path / output_name
+        
         rows = []
         for idx, item in enumerate(self.collection[:number_of_books]):
-            if text_length_cap != -1 and len(item['text']) > text_length_cap:
+            text = '\n'.join(item['text'])
+            if cap_chars != -1 and len(text) > cap_chars:
                 continue
 
             start_timer = time.perf_counter()
-            summary = await self.run_method(text=item['text'], method=method, mode=mode, initial_word_limit=initial_word_limit)
+            summary = await self.run_method(text=text, method=method, mode=mode, initial_word_limit=initial_word_limit)
             end_timer = time.perf_counter()
             runtime = end_timer - start_timer
 
@@ -119,15 +130,18 @@ class Summarisation:
             gold_annotation = item['annotation']
             
             if is_evalutation_needed:
-                bertscore, rouge = self.evaluate_annotation(generated_annotation, gold_annotation) 
+                bertscore, rouge = self.evaluate_annotation(ref_annotation=gold_annotation, gen_annotation=generated_annotation) 
     
                 record = {
                     'book_idx': idx,
                     'book_title': item['title'],
+                    'book_author': item['author'],
+                    'book_genre': item['genre'],
                     'method': method,
                     'mode': mode,
                     'initial_word_limit': initial_word_limit,
-                    'text_len': len(item['text']),
+                    'text_len (words)': len(text.split()),
+                    'annotation_len (words)': len(generated_annotation.split()),
                     'runtime_sec': round(runtime, 4),
                     'bertscore_p': float(bertscore[0]),
                     'bertscore_r': float(bertscore[1]),
@@ -137,15 +151,18 @@ class Summarisation:
     
                 rows.append(record)
     
-                self.append_to_json(record, json_path=save_json_path)
+                self.append_to_json(record, output_path=output_path)
             else: 
                 record = {
                     'book_idx': idx,
                     'book_title': item['title'],
+                    'book_author': item['author'],
+                    'book_genre': item['genre'],
                     'method': method,
                     'mode': mode,
                     'initial_word_limit': initial_word_limit,
-                    'text_len': len(item['text']),
+                    'text_len (words)': len(text.split()),
+                    'annotation_len (words)': len(generated_annotation.split()),
                     'runtime_sec': round(runtime, 4),
                     'generated_annotation': generated_annotation,
                     'gold_annotation': gold_annotation,
