@@ -6,6 +6,7 @@ from metrics import Evaluater
 import time
 import pandas as pd
 from pathlib import Path
+import asyncio
 
 
 METHOD_BLUEPRINT = 'blueprint'
@@ -74,9 +75,9 @@ class Summarisation:
         self.blueprint = Blueprint(self.client, self.device, self.encoder, mode='default', think_pass=self.think_pass)
         self.hierarchical = Hierarchical(self.client, self.device, self.encoder, mode='default', think_pass=self.think_pass)
 
-    def prepare_enviroment(self):
+    def prepare_environment(self, path: str = 'collection.json'):
         try:
-            with open('collection.json', 'r', encoding='utf-8') as f:
+            with open(path, 'r', encoding='utf-8') as f:
                 self.collection = json.load(f)
         except:
             raise ValueError('No file with annotations and book texts!')
@@ -102,58 +103,42 @@ class Summarisation:
 
     async def run_benchmark_one_method(
         self, 
-        is_evalutation_needed: bool = False,
+        is_evaluation_needed: bool = False,
         number_of_books: int = 3, 
         method: str = 'hierarchical', 
         mode: str = 'default', 
         initial_word_limit: int = 500,
         cap_chars: int = 80000,
         output_dir: str = 'output',
-        output_name: str = 'benchmark_results.jsonl'
+        output_name: str = 'benchmark_results.jsonl',
+        errors_dir: str = 'errors'
     ):
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         output_path = output_path / output_name
+
+        error_path = Path(errors_dir)
+        cleared_model_name = self.model_name.replace('/', '_').replace(' ', '')
+        error_path.mkdir(parents=True, exist_ok=True)
+        error_path = error_path / f'{cleared_model_name}_{method}_{mode}.jsonl'
         
         rows = []
         for idx, item in enumerate(self.collection[:number_of_books]):
-            text = '\n'.join(item['text'])
-            if cap_chars != -1 and len(text) > cap_chars:
-                continue
+            try: 
+                text = '\n'.join(item['text'])
+                if cap_chars != -1 and len(text) > cap_chars:
+                    continue
+    
+                start_timer = time.perf_counter()
+                summary = await self.run_method(text=text, method=method, mode=mode, initial_word_limit=initial_word_limit)
+                end_timer = time.perf_counter()
+                runtime = end_timer - start_timer
+    
+                generated_annotation = summary
+                gold_annotation = item['annotation']
 
-            start_timer = time.perf_counter()
-            summary = await self.run_method(text=text, method=method, mode=mode, initial_word_limit=initial_word_limit)
-            end_timer = time.perf_counter()
-            runtime = end_timer - start_timer
-
-            generated_annotation = summary
-            gold_annotation = item['annotation']
-            
-            if is_evalutation_needed:
-                bertscore, rouge = self.evaluate_annotation(ref_annotation=gold_annotation, gen_annotation=generated_annotation) 
-    
                 record = {
-                    'book_idx': idx,
-                    'book_title': item['title'],
-                    'book_author': item['author'],
-                    'book_genre': item['genre'],
-                    'method': method,
-                    'mode': mode,
-                    'initial_word_limit': initial_word_limit,
-                    'text_len (words)': len(text.split()),
-                    'annotation_len (words)': len(generated_annotation.split()),
-                    'runtime_sec': round(runtime, 4),
-                    'bertscore_p': float(bertscore[0]),
-                    'bertscore_r': float(bertscore[1]),
-                    'bertscore_f': float(bertscore[2]),
-                    'rougeL': float(rouge),
-                }
-    
-                rows.append(record)
-    
-                self.append_to_json(record, output_path=output_path)
-            else: 
-                record = {
+                    'model_name': self.model_name,
                     'book_idx': idx,
                     'book_title': item['title'],
                     'book_author': item['author'],
@@ -165,13 +150,49 @@ class Summarisation:
                     'annotation_len (words)': len(generated_annotation.split()),
                     'runtime_sec': round(runtime, 4),
                     'generated_annotation': generated_annotation,
-                    'gold_annotation': gold_annotation,
+                    'gold_annotation': gold_annotation
                 }
 
+                if is_evaluation_needed:
+                    start_timer_evaluation = time.perf_counter()
+                    bertscore, rouge = self.evaluate_annotation(
+                        ref_annotation=gold_annotation, gen_annotation=generated_annotation
+                    )
+                    end_timer_evaluation = time.perf_counter()
+                    runtime_evaluation = end_timer_evaluation - start_timer_evaluation
+
+                    record.update({
+                        'bertscore_p': float(bertscore[0]),
+                        'bertscore_r': float(bertscore[1]),
+                        'bertscore_f': float(bertscore[2]),
+                        'rougeL': float(rouge),
+                        'runtime_evaluation': runtime_evaluation
+                    })
+
                 rows.append(record)
-                self.append_to_json(record, json_path=save_json_path)
+                self.append_to_json(record, output_path=output_path)
+                    
+            except KeyboardInterrupt:
+                raise
+
+            except asyncio.CancelledError:
+                raise
+
+            except Exception as e:
+                err_rec = {
+                    'model_name': self.model_name,
+                    'method': method,
+                    'mode': mode,
+                    'book_idx': idx,
+                    'book_title': item['title'],
+                    'error_msg': str(e)
+                }
+
+                self.append_to_json(record=err_rec, output_path=error_path)
+                
+                continue
         
-        if is_evalutation_needed:    
+        if is_evaluation_needed:    
             data = pd.DataFrame(rows)
             print(data)
 
