@@ -75,7 +75,7 @@ class Summarisation:
         self.blueprint = Blueprint(self.client, self.device, self.encoder, mode='default', think_pass=self.think_pass)
         self.hierarchical = Hierarchical(self.client, self.device, self.encoder, mode='default', think_pass=self.think_pass)
 
-    def prepare_environment(self, path: str = 'collection.json'):
+    def prepare_environment(self, path: str = 'combined_collection.json'):
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 self.collection = json.load(f)
