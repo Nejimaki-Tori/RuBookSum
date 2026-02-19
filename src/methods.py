@@ -75,11 +75,12 @@ class Summarisation:
         self.blueprint = Blueprint(self.client, self.device, self.encoder, mode='default', think_pass=self.think_pass)
         self.hierarchical = Hierarchical(self.client, self.device, self.encoder, mode='default', think_pass=self.think_pass)
 
-    def prepare_environment(self, path: str = 'combined_collection.json'):
+    def prepare_environment(self, path: str = 'combined_data.json'):
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 self.collection = json.load(f)
-        except:
+        except Exception as e:
+            print(e)
             raise ValueError('No file with annotations and book texts!')
 
     async def run_method(self, text: str, method: str = '', mode: str = '', initial_word_limit: int = 500):
@@ -142,7 +143,7 @@ class Summarisation:
                     'book_idx': idx,
                     'book_title': item['title'],
                     'book_author': item['author'],
-                    'book_genre': item['genre'],
+                    #'book_genre': item['genre'],
                     'method': method,
                     'mode': mode,
                     'initial_word_limit': initial_word_limit,
