@@ -43,6 +43,7 @@ class Summarisation:
         is_thinking_needed: bool = False
     ):
         self.model_name = model_name
+        self.model_safe_name = model_name.replace('/', '_').replace(' ', '_')
         self.device = device
         self.encoder = encoder
         self.think_pass = '' if is_thinking_needed else ' /no_think'
@@ -114,14 +115,11 @@ class Summarisation:
         output_name: str = 'benchmark_results.jsonl',
         errors_dir: str = 'errors'
     ):
-        output_path = Path(output_dir)
+        output_path = Path(output_dir) / self.model_safe_name
         output_path.mkdir(parents=True, exist_ok=True)
+        
+        error_path = output_path / f'{self.model_safe_name}_{method}_errors.jsonl'
         output_path = output_path / output_name
-
-        error_path = Path(errors_dir)
-        cleared_model_name = self.model_name.replace('/', '_').replace(' ', '')
-        error_path.mkdir(parents=True, exist_ok=True)
-        error_path = error_path / f'{cleared_model_name}_{method}_{mode}.jsonl'
         
         rows = []
         for idx, item in enumerate(self.collection[:number_of_books]):
@@ -162,15 +160,18 @@ class Summarisation:
                     end_timer_evaluation = time.perf_counter()
                     runtime_evaluation = end_timer_evaluation - start_timer_evaluation
 
-                    record.update({
+                    metrics = {
                         'bertscore_p': float(bertscore[0]),
                         'bertscore_r': float(bertscore[1]),
                         'bertscore_f': float(bertscore[2]),
                         'rougeL': float(rouge),
+                        'runtime_sec': round(runtime, 4),
                         'runtime_evaluation': runtime_evaluation
-                    })
+                    }
 
-                rows.append(record)
+                    rows.append(metrics)
+                    record.update(metrics)
+
                 self.append_to_json(record, output_path=output_path)
                     
             except KeyboardInterrupt:
@@ -192,9 +193,6 @@ class Summarisation:
                 self.append_to_json(record=err_rec, output_path=error_path)
                 
                 continue
-        
-        if is_evaluation_needed:    
-            data = pd.DataFrame(rows)
-            print(data)
 
+        
         return rows
