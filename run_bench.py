@@ -36,92 +36,17 @@ def save_metrics_json(path, metrics: dict):
     with path.open('w', encoding='utf-8') as f:
         json.dump(metrics, f, ensure_ascii=False, indent=2)
 
-def pack_query_metrics(result: tuple[float, float]):
-    try:
-        return {
-            'ndcg_mean': float(result[0]),
-            'r_precision_mean': float(result[1]),
-        }
-    except:
-        return {'raw': result}
-
-def pack_outline_metrics(result: tuple[tuple[...], tuple[...], tuple[...]]):
-    try:
-        return {
-            'precision': {
-                'mean': float(result[0]),
-                'ci_low': float(result[1]),
-                'ci_high': float(result[2]),
-            },
-            'recall': {
-                'mean': float(result[3]),
-                'ci_low': float(result[4]),
-                'ci_high': float(result[5]),
-            },
-            'f1': {
-                'mean': float(result[6]),
-                'ci_low': float(result[7]),
-                'ci_high': float(result[8]),
-            },
-        }
-    except:
-        return {'raw': result}
-
-def pack_sections_metrics(result: tuple[tuple[...], tuple[...], tuple[...]]):
-    try:
-        return {
-            'precision': {
-                'mean': float(result[0]),
-                'ci_low': float(result[1]),
-                'ci_high': float(result[2]),
-            },
-            'recall': {
-                'mean': float(result[3]),
-                'ci_low': float(result[4]),
-                'ci_high': float(result[5]),
-            },
-            'f1': {
-                'mean': float(result[6]),
-                'ci_low': float(result[7]),
-                'ci_high': float(result[8]),
-            },
-            'rouge_l': {
-                'mean': float(result[9]),
-                'ci_low': float(result[10]),
-                'ci_high': float(result[11]),
-            },
-            'bleu': {
-                'mean': float(result[12]),
-                'ci_low': float(result[13]),
-                'ci_high': float(result[14]),
-            },
-        }
-    except:
-        return {'raw': result}
-
 def flatten_metrics(metrics: dict) -> dict:
     flat = {
         'model_name': metrics['model_name'],
-        'number_of_articles': metrics['number_of_articles'],
+        'number_of_books': metrics['number_of_books'],
     }
 
-    ranking = metrics.get('ranking', {})
-    flat['ranking_ndcg_mean'] = ranking.get('ndcg_mean')
-    flat['ranking_r_precision_mean'] = ranking.get('r_precision_mean')
-
-    outline = metrics.get('outline', {})
-    for key in ('precision', 'recall', 'f1'):
-        if key in outline:
-            flat[f'outline_{key}_mean'] = outline[key].get('mean')
-            flat[f'outline_{key}_ci_low'] = outline[key].get('ci_low')
-            flat[f'outline_{key}_ci_high'] = outline[key].get('ci_high')
-
-    sections = metrics.get('sections', {})
-    for key in ('precision', 'recall', 'f1', 'rouge_l', 'bleu'):
-        if key in sections:
-            flat[f'sections_{key}_mean'] = sections[key].get('mean')
-            flat[f'sections_{key}_ci_low'] = sections[key].get('ci_low')
-            flat[f'sections_{key}_ci_high'] = sections[key].get('ci_high')
+    for key in ('bertscore_p', 'bertscore_r', 'bertscore_f', 'rougeL'):
+        metric = metrics.get(key)
+        flat[f'outline_{key}_mean'] = metric[key].get('mean')
+        flat[f'outline_{key}_ci_low'] = metric[key].get('ci_low')
+        flat[f'outline_{key}_ci_high'] = metric[key].get('ci_high')
 
     return flat
 
@@ -133,7 +58,7 @@ def save_metrics_csv(path, metrics: dict):
         writer.writerow(row)
     
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog='RuWikiBench', description='Run WikiBench benchmark')
+    parser = argparse.ArgumentParser(prog='RuBookSum', description='Run RuBookSum benchmark')
 
     parser.add_argument('--api', required=True, help='LLM API base URL')
     parser.add_argument('--key', required=True, help='LLM API key')
@@ -141,28 +66,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--concurrency', type=int, required=True, help='Async concurrency (e.g. batch size)')
     parser.add_argument('--output-dir', required=True, help='Directory for outputs')
 
-    parser.add_argument('--number-of-articles', type=int, default=5, help='Number of articles used for evaluation')
-    parser.add_argument('--encoder-name', default='sergeyzh/BERTA', help='Encoder for embeddings')
+    parser.add_argument('--number-of-books', type=int, default=5, help='Number of books used for evaluation')
+    parser.add_argument('--encoder-name', default='deepvk/USER-bge-m3', help='Encoder for embeddings')
     parser.add_argument('--device', default='auto', choices=['auto', 'cpu', 'cuda'])
 
-    parser.add_argument('--prepare-env', action='store_true', help='Create corpus from scratch (one-time)')
+    parser.add_argument('--method', type=str, default='hierarchical')
+    parser.add_argument('--mode', type=str, default='default')
 
-    parser.add_argument('--neighbor-count', type=int, default=0)
-    parser.add_argument(
-        '--no-description-mode', 
-        action='store_false', 
-        dest='description_mode', 
-        help='Disable description mode in cluster summarization'
-    )
-    parser.set_defaults(description_mode=True)
-    
-    parser.add_argument(
-        '--no-clusterization-with-hint', 
-        action='store_false', 
-        dest='clusterization_with_hint', 
-        help='Disable clusterization with hint'
-    )
-    parser.set_defaults(clusterization_with_hint=True)
+    parser.add_argument('--initial-word-limit', type=int, default=5)
 
     return parser
 
@@ -181,20 +92,17 @@ async def run(args):
         'api': args.api,
         'model_name': args.model_name,
         'concurrency': args.concurrency,
-        'number_of_articles': args.number_of_articles,
+        'number_of_books': args.number_of_books,
         'encoder_name': args.encoder_name,
         'device': str(device),
-        'prepare_env': args.prepare_env,
-        'neighbor_count': args.neighbor_count,
-        'description_mode': args.description_mode,
-        'clusterization_with_hint': args.clusterization_with_hint,
+        'method': args.method,
+        'mode': args.mode,
     })
 
     bench = Summarisation(
         url=args.api,
         key=args.key,
         model_name=args.model_name,
-        model_safe_name=model_safe_name,
         device=device,
         encoder=encoder,
         number_of_articles=args.number_of_articles,
@@ -204,34 +112,19 @@ async def run(args):
 
     bench.prepare_environment()
 
-    scores = bench.run_benchmark_one_method(
+    metrics = bench.run_benchmark_one_method(
         is_evaluation_needed=is_evaluation_needed,
         number_of_books=number_of_books,
-        method=method,
-        mode=mode,
+        method=args.method,
+        mode=args.mode,
         initial_word_limit=initial_word_limit,
-        cap_chars=cap_chars,
-        output_dir=output_dir,
-        errors_dir=errors_dir
+        cap_chars=args.cap_chars
     )
 
-    score_query = await bench.rank_query()
-
-    score_outline = await bench.rank_outline(
-        neighbor_count=args.neighbor_count,
-        description_mode=args.description_mode,
-        clusterization_with_hint=args.clusterization_with_hint,
-    )
-
-    score_sections = await bench.rank_sections()
-
-    metrics = {
+    metrics.update({
         'model_name': args.model_name,
         'number_of_articles': args.number_of_articles,
-        'ranking': pack_query_metrics(score_query),
-        'outline': pack_outline_metrics(score_outline),
-        'sections': pack_sections_metrics(score_sections),
-    }
+    })
 
     save_metrics_json(model_dir / 'metrics.json', metrics)
     save_metrics_csv(model_dir / 'metrics.csv', metrics)

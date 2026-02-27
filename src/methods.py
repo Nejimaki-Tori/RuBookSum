@@ -45,12 +45,13 @@ class Summarisation:
         device=None, 
         encoder=None, 
         model_name: str = '', 
+        model_safe_name: str = '',
         output_dir: str = '',
         is_thinking_needed: bool = False,
         concurrency: int = 40
     ):
         self.model_name = model_name
-        self.model_safe_name = model_name.replace('/', '_').replace(' ', '_')
+        self.model_safe_name = model_safe_name if model_safe_name else model_name.replace('/', '_').replace(' ', '_')
         self.device = device
         self.encoder = encoder
         self.concurrency = concurrency
