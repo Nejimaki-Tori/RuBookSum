@@ -16,12 +16,14 @@ class Blueprint(Hierarchical):
         device, 
         encoder, 
         mode: str = 'default', 
-        think_pass: str = ''
+        think_pass: str = '',
+        concurrency: int = 40
     ):
         super().__init__(client, device, encoder, mode='default', think_pass=think_pass)
         if mode not in ('default', 'cluster'):
             raise ValueError('Wrong mode for Blueprint! Choose either `default` or `cluster`.')
-            
+
+        self.concurrency = concurrency
         self.mode = mode
     
     async def summarize_with_blueprint(self, chunk, blueprint):
@@ -49,7 +51,7 @@ class Blueprint(Hierarchical):
         for question in questions:
             answers.append(self.get_answer(chunk, question))
 
-        await answers.complete_couroutines(batch_size=40)
+        await answers.complete_couroutines(batch_size=self.concurrency)
         answers = await answers.to_list()
 
         return answers
@@ -94,7 +96,7 @@ class Blueprint(Hierarchical):
         for chunk in chunks:
             questions_set.append(self.generate_questions_chunk(chunk))
         
-        await questions_set.complete_couroutines(batch_size=40)
+        await questions_set.complete_couroutines(batch_size=self.concurrency)
         questions_set = await questions_set.to_list()
 
         if self.mode == 'cluster':
@@ -106,7 +108,7 @@ class Blueprint(Hierarchical):
             generalized = AsyncList()
             for questions in question_clusters.values():
                 generalized.append(self.generalize_questions(questions, question_limit=10))
-            await generalized.complete_couroutines(batch_size=40)
+            await generalized.complete_couroutines(batch_size=self.concurrency)
             generalized_questions = await generalized.to_list()
             
             blueprint = '\n'.join(q.strip() for q in generalized_questions if q.strip())
@@ -137,7 +139,7 @@ class Blueprint(Hierarchical):
         for chunk, bp in zip(chunks, blueprint):
             summaries_list.append(self.summarize_with_blueprint(chunk, bp))
                 
-        await summaries_list.complete_couroutines(batch_size=40)
+        await summaries_list.complete_couroutines(batch_size=self.concurrency)
         summaries = await summaries_list.to_list()
         while len(summaries) > 1:
             tasks = AsyncList()
@@ -149,7 +151,7 @@ class Blueprint(Hierarchical):
                 tasks.append(self.merge_pair(sum1, sum2, word_limit, blueprint if self.mode == 'cluster' else None))
                 i = i + 2 if i + 1 < len(summaries) else i + 1
                 
-            await tasks.complete_couroutines(batch_size=40)
+            await tasks.complete_couroutines(batch_size=self.concurrency)
             summaries = await tasks.to_list()
             blueprint = await self.generate_blueprint(summaries) if self.mode == 'cluster' else None
     

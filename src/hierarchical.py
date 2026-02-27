@@ -10,7 +10,8 @@ class Hierarchical:
         device, 
         encoder, 
         mode: str = 'default',
-        think_pass: str = ''
+        think_pass: str = '',
+        concurrency: int = 40
     ):
         self.client = client
         self.device = device
@@ -18,6 +19,8 @@ class Hierarchical:
         self.think_pass = think_pass
         if mode not in ('default', 'filtered'):
             raise ValueError('Wrong mode for Hierarchical! Choose either `default` or `filtered`.')
+
+        self.concurrency = concurrency
         self.mode = mode
 
     def clean_memory(self):
@@ -98,7 +101,7 @@ class Hierarchical:
         for chunk in rest_chunks:
             results.append(self.summarize_chunk(chunk, initial_word_limit))
     
-        await results.complete_couroutines(batch_size=40)
+        await results.complete_couroutines(batch_size=self.concurrency)
         summaries = await results.to_list()
         current_level_summaries = summaries
         current_word_limit = initial_word_limit
@@ -127,7 +130,7 @@ class Hierarchical:
                 else:
                     tasks.append(current_level_summaries[i])
                     i += 1
-            await tasks.complete_couroutines(batch_size=40)
+            await tasks.complete_couroutines(batch_size=concurrency)
             next_level_summaries = await tasks.to_list()
 
             current_level_summaries = self.filter_near_duplicates(next_level_summaries) if self.mode == 'filtered' else next_level_summaries
