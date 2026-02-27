@@ -42,11 +42,11 @@ def flatten_metrics(metrics: dict) -> dict:
         'number_of_books': metrics['number_of_books'],
     }
 
-    for key in ('bertscore_p', 'bertscore_r', 'bertscore_f', 'rougeL'):
+    for key in ('bertscore_p', 'bertscore_r', 'bertscore_f', 'rougeL', 'runtime'):
         metric = metrics.get(key)
-        flat[f'outline_{key}_mean'] = metric.get('mean')
-        flat[f'outline_{key}_ci_low'] = metric.get('ci_low')
-        flat[f'outline_{key}_ci_high'] = metric.get('ci_high')
+        flat[f'{key}_mean'] = metric.get('mean')
+        flat[f'{key}_ci_low'] = metric.get('ci_low')
+        flat[f'{key}_ci_high'] = metric.get('ci_high')
 
     return flat
 
@@ -86,7 +86,7 @@ async def run(args):
     output_dir = repo_root / args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    model_dir = output_dir / model_safe_name / f'{args.method}_{args.mode}'
+    model_dir = output_dir / model_safe_name
     model_dir.mkdir(parents=True, exist_ok=True)
     
     save_config(model_dir / 'config.json', {

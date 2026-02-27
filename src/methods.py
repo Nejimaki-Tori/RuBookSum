@@ -130,7 +130,7 @@ class Summarisation:
         output_name: str = 'benchmark_results.jsonl',
         errors_file: str = 'errors.jsonl'
     ):
-        output_dir = self.output_path / f'{method}_{mode}'
+        output_dir = self.output_path
         output_dir.mkdir(parents=True, exist_ok=True)
         
         error_path = output_dir / errors_file
@@ -162,7 +162,7 @@ class Summarisation:
                     'initial_word_limit': initial_word_limit,
                     'text_len (words)': len(text.split()),
                     'annotation_len (words)': len(generated_annotation.split()),
-                    'runtime_sec': round(runtime, 4),
+                    'runtime': round(runtime, 4),
                     'generated_annotation': generated_annotation,
                     'gold_annotation': gold_annotation
                 }
@@ -180,7 +180,7 @@ class Summarisation:
                         'bertscore_r': float(bertscore[1]),
                         'bertscore_f': float(bertscore[2]),
                         'rougeL': float(rouge),
-                        'runtime_sec': round(runtime, 4),
+                        'runtime': round(runtime, 4),
                         'runtime_evaluation': runtime_evaluation
                     }
 
@@ -210,7 +210,7 @@ class Summarisation:
                 continue
 
         final_metrics = {}
-        metrics_names = ['bertscore_p', 'bertscore_r', 'bertscore_f', 'rougeL']
+        metrics_names = ['bertscore_p', 'bertscore_r', 'bertscore_f', 'rougeL', 'runtime']
         for name in metrics_names:
             data = [elem[name] for elem in rows]
             _mean, _min, _max = self.metrics_to_intervals(data=data)
