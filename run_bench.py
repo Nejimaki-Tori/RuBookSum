@@ -44,9 +44,9 @@ def flatten_metrics(metrics: dict) -> dict:
 
     for key in ('bertscore_p', 'bertscore_r', 'bertscore_f', 'rougeL'):
         metric = metrics.get(key)
-        flat[f'outline_{key}_mean'] = metric[key].get('mean')
-        flat[f'outline_{key}_ci_low'] = metric[key].get('ci_low')
-        flat[f'outline_{key}_ci_high'] = metric[key].get('ci_high')
+        flat[f'outline_{key}_mean'] = metric.get('mean')
+        flat[f'outline_{key}_ci_low'] = metric.get('ci_low')
+        flat[f'outline_{key}_ci_high'] = metric.get('ci_high')
 
     return flat
 
@@ -123,7 +123,7 @@ async def run(args):
 
     metrics.update({
         'model_name': args.model_name,
-        'number_of_articles': args.number_of_articles,
+        'number_of_books': args.number_of_books,
     })
 
     save_metrics_json(model_dir / 'metrics.json', metrics)
