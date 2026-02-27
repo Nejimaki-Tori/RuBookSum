@@ -70,10 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--encoder-name', default='deepvk/USER-bge-m3', help='Encoder for embeddings')
     parser.add_argument('--device', default='auto', choices=['auto', 'cpu', 'cuda'])
 
-    parser.add_argument('--method', type=str, default='hierarchical')
-    parser.add_argument('--mode', type=str, default='default')
+    parser.add_argument('--method', type=str, default='hierarchical', choices=['hierarchical', 'blueprint'])
+    parser.add_argument('--mode', type=str, default='default', choices=['default', 'cluster', 'filtered'])
 
-    parser.add_argument('--initial-word-limit', type=int, default=5)
+    parser.add_argument('--initial-word-limit', type=int, default=500)
+    parser.add_argument('--cap-chars', type=int, default=80000)
 
     return parser
 
@@ -85,7 +86,7 @@ async def run(args):
     output_dir = repo_root / args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    model_dir = output_dir / model_safe_name
+    model_dir = output_dir / model_safe_name / f'{args.method}_{args.mode}'
     model_dir.mkdir(parents=True, exist_ok=True)
     
     save_config(model_dir / 'config.json', {
@@ -105,19 +106,18 @@ async def run(args):
         model_name=args.model_name,
         device=device,
         encoder=encoder,
-        number_of_articles=args.number_of_articles,
         output_dir=args.output_dir,
         concurrency=args.concurrency,
     )
 
     bench.prepare_environment()
 
-    metrics = bench.run_benchmark_one_method(
-        is_evaluation_needed=is_evaluation_needed,
-        number_of_books=number_of_books,
+    metrics = await bench.run_benchmark_one_method(
+        is_evaluation_needed=True,
+        number_of_books=args.number_of_books,
         method=args.method,
         mode=args.mode,
-        initial_word_limit=initial_word_limit,
+        initial_word_limit=args.initial_word_limit,
         cap_chars=args.cap_chars
     )
 

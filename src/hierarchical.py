@@ -130,7 +130,7 @@ class Hierarchical:
                 else:
                     tasks.append(current_level_summaries[i])
                     i += 1
-            await tasks.complete_couroutines(batch_size=concurrency)
+            await tasks.complete_couroutines(batch_size=self.concurrency)
             next_level_summaries = await tasks.to_list()
 
             current_level_summaries = self.filter_near_duplicates(next_level_summaries) if self.mode == 'filtered' else next_level_summaries
