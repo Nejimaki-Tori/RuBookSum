@@ -1,5 +1,6 @@
 from typing import List
 from rouge import Rouge
+from scipy.stats import bootstrap
 from utils import AsyncList, model, extract_response
 import re
 import nltk
@@ -11,55 +12,21 @@ import aiofiles
 import json
 import asyncio
 import math
+import numpy as np
 
 
 nltk.download('punkt')
 nltk.download('punkt_tab')
 
-QUESTIONS_COVERAGE_PROMPT = """Ты - эксперт в оценивании качества аннотаций для книг. Твоя задача — тщательно оценить, насколько представленная аннотация позволяет ответить на конкретный вопрос, касающийся ключевых аспектов исходного произведения.
-
-Вопрос:
-{question}
-Текст аннотации:
-{text}
-
-Содержится ли в этом тексте ответ на вопрос?
-Начни ответ с {yes}, если содержится или с {no}, если не содержится.
-"""
-
-GOLD_QUESTIONS_PROMPT = """На основе данной аннотации сформируй несколько ключевых вопросов, ответы на которые можно однозначно дать, зная содержание аннотации. Пиши каждый вопрос с новой строки, пронумеровать не нужно. Ничего кроме вопросов — ни вступлений, ни пояснений, ни заголовков. 
-
-Аннотация:
----
-{ref_annotation}
----
-Ключевые вопросы нужно писать по порядку, начиная каждый вопрос с новой строки. Кроме ключевых вопросов ничего писать не нужно.
-"""
-
-ANSWER_PROMPT = """На основе данной аннотации сформируй ответ на поставленный вопрос. Твоя задача — **строго на основе предоставленной аннотации** сформировать ответ на ключевой вопрос.
-
-Аннотация:
-{ref_annotation}
-
-Ключевой вопрос:
-{key_q}
----
-
-Не пиши вопрос, пиши только ответ.
-"""
-
 class Evaluater:
     def __init__(
-        self, 
-        #evaluater=None, 
+        self,
         device=None, 
         encoder=None
     ):
         self.device = device
         self.encoder = encoder
-        self.stemmer = SnowballStemmer('russian')
-        #self.client_eval = evaluater
-        #self.qa_dir = 'qa_data'        
+        self.stemmer = SnowballStemmer('russian')       
         
     def lemmatize_text(self, text):
         tokens = word_tokenize(text, language='russian')
@@ -82,7 +49,7 @@ class Evaluater:
             refs=[ref],   
             avg=False               
         )
-        rouge_l = scores[0]["rouge-l"]
+        rouge_l = scores[0]['rouge-l']
         return rouge_l['f']
 
     def bertscore(self, ref, pred):
@@ -104,6 +71,28 @@ class Evaluater:
         emb_2 = self.encoder.encode(b, device=self.device)
     
         return round(float(self.encoder.similarity(emb_1, emb_2).item()), 3)
+
+    def bootstrap(self, data):
+        if not data:
+            return None
+            
+        if len(data) < 2:
+            return data[0], data[0], data[0]
+            
+        data = np.array(data)
+        data1 = (data,)
+        bootstrap_ci = bootstrap(
+            data1, 
+            np.mean, 
+            confidence_level=0.95, 
+            n_resamples=len(data)*100,
+            random_state=42
+        )
+        dist = bootstrap_ci.bootstrap_distribution
+        _mean = np.quantile(dist, q=0.5)
+        _min = np.quantile(dist, q=0.025)
+        _max = np.quantile(dist, q=0.975)
+        return _mean, _min, _max
 
     def evaluate_annotation(self, ref_annotation, gen_annotation):
         bertscore = self.bertscore(ref_annotation, gen_annotation)

@@ -9,6 +9,11 @@ from pathlib import Path
 import asyncio
 
 
+try:
+    repo_root = Path(__file__).resolve().parents[1]   # .../RuBookSum
+except:
+    repo_root = Path.cwd().resolve()
+
 METHOD_BLUEPRINT = 'blueprint'
 METHOD_HIERARCHICAL = 'hierarchical'
 
@@ -40,31 +45,38 @@ class Summarisation:
         device=None, 
         encoder=None, 
         model_name: str = '', 
-        is_thinking_needed: bool = False
+        output_dir: str = '',
+        is_thinking_needed: bool = False,
+        concurrency: int = 40
     ):
         self.model_name = model_name
         self.model_safe_name = model_name.replace('/', '_').replace(' ', '_')
         self.device = device
         self.encoder = encoder
+        self.concurrency = concurrency
         self.think_pass = '' if is_thinking_needed else ' /no_think'
+
+        self.output_path = repo_root / output_dir / self.model_safe_name
+        
         self.client = LlmCompleter(url, key, self.model_name)
         self.blueprint = Blueprint(
-            self.client, 
-            self.device, 
-            self.encoder, 
+            client=self.client, 
+            device=self.device, 
+            encoder=self.encoder, 
             mode='default', 
-            think_pass=self.think_pass
+            think_pass=self.think_pass,
+            concurrency=self.concurrency
         )
         self.hierarchical = Hierarchical(
-            self.client, 
-            self.device, 
-            self.encoder, 
+            client=self.client, 
+            device=self.device, 
+            encoder=self.encoder, 
             mode='default',
-            think_pass=self.think_pass
+            think_pass=self.think_pass,
+            concurrency=self.concurrency
         )
-        #self.client_evaluater = LlmCompleter(URL, KEY, 'Qwen3-235B-A22B-Instruct-2507')
+
         self.evaluater = Evaluater(
-            #evaluater=self.client_evaluater, 
             device=self.device, 
             encoder=self.encoder
         )
@@ -97,6 +109,9 @@ class Summarisation:
     def evaluate_annotation(self, ref_annotation, gen_annotation):
         return self.evaluater.evaluate_annotation(ref_annotation, gen_annotation)
 
+    def metrics_to_intervals(self, data):
+        return self.evaluater.bootstrap(data)
+
     def append_to_json(self, record: dict, output_path):
         line = json.dumps(record, ensure_ascii=False) + '\n'
         with output_path.open('a', encoding='utf-8') as f:
@@ -111,15 +126,14 @@ class Summarisation:
         mode: str = 'default', 
         initial_word_limit: int = 500,
         cap_chars: int = 80000,
-        output_dir: str = 'output',
         output_name: str = 'benchmark_results.jsonl',
-        errors_dir: str = 'errors'
+        errors_file: str = 'errors.jsonl'
     ):
-        output_path = Path(output_dir) / self.model_safe_name
-        output_path.mkdir(parents=True, exist_ok=True)
+        output_dir = self.output_path / f'{method}_{mode}'
+        output_dir.mkdir(parents=True, exist_ok=True)
         
-        error_path = output_path / f'{self.model_safe_name}_{method}_errors.jsonl'
-        output_path = output_path / output_name
+        error_path = output_dir / errors_file
+        output_file_path = output_dir / output_name
         
         rows = []
         for idx, item in enumerate(self.collection[:number_of_books]):
@@ -172,7 +186,7 @@ class Summarisation:
                     rows.append(metrics)
                     record.update(metrics)
 
-                self.append_to_json(record, output_path=output_path)
+                self.append_to_json(record, output_path=output_file_path)
                     
             except KeyboardInterrupt:
                 raise
@@ -194,5 +208,15 @@ class Summarisation:
                 
                 continue
 
-        
-        return rows
+        final_metrics = {}
+        metrics_names = ['bertscore_p', 'bertscore_r', 'bertscore_f', 'rougeL']
+        for name in metrics_names:
+            data = [elem[name] for elem in rows]
+            _mean, _min, _max = self.metrics_to_intervals(data=data)
+            final_metrics[name] = {
+                'mean': float(_mean),
+                'ci_low': float(_min),
+                'ci_high': float(_max),
+            }
+            
+        return final_metrics
