@@ -78,58 +78,89 @@ def build_parser() -> argparse.ArgumentParser:
 
     return parser
 
-async def run(args):
-    device = resolve_device(args.device)
-    encoder = build_encoder(args.encoder_name, device)
+async def run_benchmark(
+    api: str,
+    key: str,
+    model_name: str,
+    concurrency: int,
+    output_dir: str,
+    number_of_books: int = 5,
+    encoder_name: str = 'deepvk/USER-bge-m3',
+    device: str = 'auto',
+    method: str = 'hierarchical',
+    mode: str = 'default',
+    initial_word_limit: int = 500,
+    cap_chars: int = 80000,
+    shared_encoder=None,
+    shared_device=None,
+):
+    device = resolve_device(device) if not shared_device else shared_device
+    encoder = build_encoder(encoder_name, device) if not shared_encoder else shared_encoder
 
-    model_safe_name = args.model_name.replace('/', '_').replace(' ', '_')
-    output_dir = repo_root / args.output_dir
+    output_dir = repo_root / output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    model_safe_name = model_name.replace('/', '_').replace(' ', '_')
     model_dir = output_dir / model_safe_name
     model_dir.mkdir(parents=True, exist_ok=True)
     
     save_config(model_dir / 'config.json', {
-        'api': args.api,
-        'model_name': args.model_name,
-        'concurrency': args.concurrency,
-        'number_of_books': args.number_of_books,
-        'encoder_name': args.encoder_name,
+        'api': api,
+        'model_name': model_name,
+        'concurrency': concurrency,
+        'number_of_books': number_of_books,
+        'encoder_name': encoder_name,
         'device': str(device),
-        'method': args.method,
-        'mode': args.mode,
+        'method': method,
+        'mode': mode,
     })
 
     bench = Summarisation(
-        url=args.api,
-        key=args.key,
-        model_name=args.model_name,
+        url=api,
+        key=key,
+        model_name=model_name,
         device=device,
         encoder=encoder,
-        output_dir=args.output_dir,
-        concurrency=args.concurrency,
+        output_dir=output_dir,
+        concurrency=concurrency,
     )
 
     bench.prepare_environment()
 
     metrics = await bench.run_benchmark_one_method(
         is_evaluation_needed=True,
-        number_of_books=args.number_of_books,
-        method=args.method,
-        mode=args.mode,
-        initial_word_limit=args.initial_word_limit,
-        cap_chars=args.cap_chars
+        number_of_books=number_of_books,
+        method=method,
+        mode=mode,
+        initial_word_limit=initial_word_limit,
+        cap_chars=cap_chars
     )
 
     metrics.update({
-        'model_name': args.model_name,
-        'number_of_books': args.number_of_books,
+        'model_name': model_name,
+        'number_of_books': number_of_books,
     })
 
     save_metrics_json(model_dir / 'metrics.json', metrics)
     save_metrics_csv(model_dir / 'metrics.csv', metrics)
     
     return metrics
+    
+async def run(args):
+    return await run_benchmark(
+        api=args.api,
+        key=args.key,
+        model_name=args.model_name,
+        concurrency=args.concurrency,
+        output_dir=args.output_dir,
+        number_of_books=args.number_of_books,
+        encoder_name=args.encoder_name,
+        device=args.device,
+        method=args.method,
+        mode=args.mode,
+        initial_word_limit=args.initial_word_limit,
+        cap_chars=args.cap_chars,
+    )
 
 def main():
     parser = build_parser()
