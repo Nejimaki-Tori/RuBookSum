@@ -137,12 +137,18 @@ class Summarisation:
         output_file_path = output_dir / output_name
         
         rows = []
-        for idx, item in enumerate(self.collection[:number_of_books]):
+        book_count = 0
+        for idx, item in enumerate(self.collection):
             try: 
                 text = '\n'.join(item['text'])
                 if cap_chars != -1 and len(text) > cap_chars:
                     continue
-    
+
+                if book_count >= number_of_books:
+                    break
+                    
+                book_count += 1
+                
                 start_timer = time.perf_counter()
                 summary = await self.run_method(text=text, method=method, mode=mode, initial_word_limit=initial_word_limit)
                 end_timer = time.perf_counter()
