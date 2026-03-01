@@ -67,10 +67,7 @@ class Hierarchical:
         previous_summary: str = ''
     ):
         combined_summary = " ".join(summaries)
-    
-        if len(combined_summary.split()) > word_limit:
-            combined_summary = await self.summarize_chunk(combined_summary, word_limit)
-    
+
         if use_context:
             myprompt = SUMMARY_MERGE_WITH_CONTEXT_PROMPT.format(
                 previous_summary=previous_summary, 
