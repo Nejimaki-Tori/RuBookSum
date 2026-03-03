@@ -74,8 +74,6 @@ class LlmCompleter:
                 "guided_choice": choices,
                 "add_generation_prompt": needs_generation_start,
                 "chat_template_kwargs": {
-                "enable_thinking": use_thinking
-                },
                 "chat_template_kwargs": {
                 "enable_thinking": False
                 },
