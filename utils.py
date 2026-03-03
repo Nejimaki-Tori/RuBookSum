@@ -73,6 +73,9 @@ class LlmCompleter:
                 "repetition_penalty": rep_penalty,
                 "guided_choice": choices,
                 "add_generation_prompt": needs_generation_start,
+                "chat_template_kwargs": {
+                "enable_thinking": False
+                },
                 "continue_final_message": not needs_generation_start,
                 "guided_regex": regex_pattern,
                 "use_beam_search": use_beam_search,
