@@ -7,12 +7,11 @@
 ## Содержание
 
 1. [Описание](#описание)
-2. [Требования](#требования)
-3. [Датасет](#датасет)
-4. [Структура репозитория](#структура-репозитория)
-5. [Установка](#установка)
-6. [Параметры](#параметры)
-7. [Метрики](#метрики)
+2. [Датасет](#датасет)
+3. [Структура репозитория](#структура-репозитория)
+4. [Установка](#установка)
+5. [Параметры](#параметры)
+6. [Метрики](#метрики)
 
 ---
 
@@ -27,33 +26,14 @@
 * **Иерархический с фильтрацией узлов** — улучшенный иерархический метод с удалением семантически близких фрагментов.
 * **«Чертёжный» с кластеризацией вопросов** — вариант чертёжного метода, где вопросы группируются по смыслу.
 
-Для оценки качества используются метрики **ROUGE-L**, **BERTScore**, **Coverage** и **Answer Similarity**.
-
----
-
-## Требования
-
-* Python 3.8+
-* asyncio
-* openai
-* scipy
-* nltk
-* transformers
-* tqdm
-* evaluate
-* sentence\_transformers
-* numpy
-* razdel
-* rouge
-* scikit-learn
-
-Для взаимодействия с LLM требуется клиент, реализованный в `utils.py`, который обращается к серверу по API-ключу и URL.
+Для оценки качества используются метрики **ROUGE-L** и **BERTScore**.
 
 ---
 
 ## Датасет
 
 В json-файле `combined_data.json` находятся собранные тексты книг и их аннотаций, а также информация об авторе произведения и его названия.
+Датасет можно скачать по ссылке: https://huggingface.co/datasets/NejimakiTori/literature_sum
 
 ---
 
@@ -70,7 +50,8 @@
 │   ├── prompts.py              # Промпты для модели
 │   └── methods.py              # Объединяет в себе все реализованные методы
 ├── utils.py                    # LLM-клиент и вспомогательные функции (разбиение на чанки и др.)
-├── metrics.py                  # Метрики: ROUGE-L, BERTScore, Coverage, Answer Similarity
+├── metrics.py                  # Метрики: ROUGE-L, BERTScore
+├── local_benchmark_vllm.ipynb    # Ноутбук для локального запуска через VLLM
 ├── main.ipynb                  # Демонстрация работы фреймворка
 └── requirements.txt            # Зависимости
 ```
@@ -86,6 +67,7 @@ cd BoookSum
 
 # 2. Устанавливаем зависимости
 pip install -r requirements.txt
+
 # 3. Желательно установить torch с поддержкой вычислений на GPU
 pip install torch==1.12.1+cu114 torchvision==0.13.1+cu114 torchaudio==0.12.1 \
 --extra-index-url https://download.pytorch.org/whl/cu114
@@ -96,28 +78,32 @@ pip install torch==1.12.1+cu114 torchvision==0.13.1+cu114 torchaudio==0.12.1 \
 ## Пример использования
 
 ```python
-import sys
 import torch
 from sentence_transformers import SentenceTransformer
-sys.path.append('src')
-from methods import Summarisation
+from run_bench import run_benchmark
 
-with open('Access_key.txt', 'r', encoding='utf-8') as file: # тут можно указать эндпоинты
-    url, key = file.read().split()
+url = 'YOUR_URL'
+key = 'YOUR_KEY'
+model_name = 'YOUR_MODEL_NAME'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 encoder = SentenceTransformer('deepvk/USER-bge-m3').to(device)
-bench = Summarisation(url=url, key=key, model_name='ruadapt-qwen3-4b', device=device, encoder=encoder) # здесь указывается название модели
-bench.prepare_enviroment()
 
-result = await bench.run_benchmark_one_method(
-    is_evalutation_needed=True, # нужен ли подсчет метрик
-    number_of_books=1, # сколько книг будет обработано
-    method='hierarchical', # метод сжатия
-    mode='default', # режим для метода сжатия
-    initial_word_limit=500, # максимальная длина аннотации (в символах)
-    text_length_cap=80000, # слишком длинные тексты не будут обрабатываться
-    save_json_path='benchmark_results.json' # куда сохранять результаты
+result = await run_benchmark(
+    api=url,
+    key=key,
+    model_name=model_name,
+    concurrency=40,
+    output_dir='output_hierarchical_default',
+    number_of_books=40,
+    encoder_name = 'deepvk/USER-bge-m3',
+    device = 'auto',
+    method = 'hierarchical',
+    mode = 'default',
+    initial_word_limit = 500,
+    cap_chars = 80000,
+    shared_encoder=encoder,
+    shared_device=device,
 )
 ```
 
@@ -127,7 +113,6 @@ result = await bench.run_benchmark_one_method(
 | ------------------------------- | -------------------- | --------------------- | ------------------------------------------------------------------ |
 | `Hierarchical.run`              | `initial_word_limit` | `500`                 | Максимальное число слов в аннотации                                |
 |                                 | `mode`               | `default`             | Фильтрация семантически близких узлов                              |
-| `Iterative.run`                 | `initial_word_limit` | `500`                 | Лимит слов при итеративном обновлении аннотации                    |
 | `Blueprint.run`                 | `initial_word_limit` | `500`                 | Лимит слов в итоговой аннотации                                    |
 |                                 | `mode`               | `'default'`           | Режим работы Text-Blueprint: `default` или `cluster`               |
 | `Evaluater.evaluate_annotation` | —                    | —                     | Использует метрики ROUGE-L, BERTScore                              |
